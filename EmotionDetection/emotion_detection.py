@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 
+import requests
+
 try:
     from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
     from ibm_watson import NaturalLanguageUnderstandingV1
@@ -59,20 +61,51 @@ def _fallback_emotion_data(text: str) -> Dict[str, Any]:
     return normalized
 
 
-def emotion_detector(text: str, api_key: str | None = None, url: str | None = None) -> Dict[str, Any]:
+def emotion_detector(
+    text: str | None = None,
+    api_key: str | None = None,
+    url: str | None = None,
+    *,
+    text_to_analyze: str | None = None,
+    text_to_analyse: str | None = None,
+) -> Dict[str, Any]:
     """Analyze the provided text to find the dominant emotion.
 
     The first call attempts to use IBM Watson NLU. If the service cannot be reached or
     credentials are missing, a deterministic local fallback is used so the project can still
     be tested and demonstrated in offline environments.
     """
-    if text is None or not text.strip():
+    if text is None:
+        text = text_to_analyze if text_to_analyze is not None else text_to_analyse
+    if text is None or not str(text).strip():
         raise ValueError("Text is blank. Please provide a non-empty text.")
+    text = str(text)
 
     if api_key is None:
         api_key = os.getenv("IBM_API_KEY")
     if url is None:
         url = os.getenv("IBM_URL")
+
+    if url and api_key:
+        endpoint = url.rstrip("/") + "/v1/analyze?version=2022-04-07"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+        payload = {
+            "text": text,
+            "features": {"emotion": {}},
+            "return_analyzed_text": False,
+        }
+        try:
+            response = requests.post(endpoint, headers=headers, json=payload, timeout=20)
+            response.raise_for_status()
+            result = response.json()
+            raw_scores = result.get("emotion", {}).get("document", {}).get("emotion", {})
+            if raw_scores:
+                return _normalize_emotion_scores(raw_scores)
+        except Exception:  # pragma: no cover - fallback is deliberately resilient.
+            pass
 
     if NaturalLanguageUnderstandingV1 is not None and IAMAuthenticator is not None and api_key and url:
         try:
@@ -113,3 +146,8 @@ def format_emotion(emotion_data: Dict[str, Any]) -> str:
         f"sadness: {scores['sadness']:.2f}%, "
         f"dominant: {dominant} ({dominant_score:.2f}%)"
     )
+
+
+if __name__ == "__main__":
+    print(format_emotion("I am so happy today"))
+

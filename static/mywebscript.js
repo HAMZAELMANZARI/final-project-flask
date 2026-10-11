@@ -2,7 +2,7 @@ let RunSentimentAnalysis = () => {
     const textToAnalyze = document.getElementById("textToAnalyze").value;
 
     if (!textToAnalyze.trim()) {
-        document.getElementById("system_response").innerHTML = "Text is blank. Please provide a non-empty text.";
+        document.getElementById("system_response").innerHTML = "Invalid input! Try again.";
         return;
     }
 
